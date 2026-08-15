@@ -7,6 +7,55 @@ import streamlit as st
 import db
 import stats
 
+import sqlite3
+
+# 1. Função para conectar ao banco de dados SQLite
+def conectar_banco():
+    # O 'dados_fc.db' é o arquivo do nosso banco de dados local
+    conexao = sqlite3.connect("dados_fc.db")
+    return conexao
+
+# 2. Função para criar a tabela e aplicar a carga inicial (Seed)
+def inicializar_banco_times():
+    conexao = conectar_banco()
+    cursor = conexao.cursor()
+
+    # Cria a tabela de times se ela ainda não existir
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS times (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome_time TEXT NOT NULL UNIQUE
+        )
+    """)
+
+    # Lista padrão de times da família (você pode alterar ou adicionar mais depois)
+    times_padrao = [
+        ("Real Madrid",),
+        ("Barcelona",),
+        ("Manchester City",),
+        ("Bayern de Munique",),
+        ("Liverpool",),
+        ("PSG",)
+    ]
+
+    # Verificamos se a tabela já possui algum time cadastrado
+    cursor.execute("SELECT COUNT(*) FROM times")
+    quantidade = cursor.fetchone()[0]
+
+    # Se a tabela estiver vazia (quantidade == 0), injetamos a seed!
+    if quantidade == 0:
+        # executemany insere vários itens de uma vez só com segurança
+        cursor.executemany("INSERT OR IGNORE INTO times (nome_time) VALUES (?)", times_padrao)
+        conexao.commit()
+        print("Carga inicial (Seed) de times realizada com sucesso!")
+
+    # Fechamos a conexão para liberar recursos do sistema
+    conexao.close()
+
+# Executamos a função assim que o script é lido
+inicializar_banco_times()
+
+
 # Configuração da página
 st.set_page_config(page_title="App FC Family", page_icon="⚽", layout="wide")
 db.init_db()
