@@ -170,19 +170,29 @@ with tab_jogadores:
 
 
 # =========================================================================
-# 5. ABA: CLUBES E PAÍSES
+# 5. ABA: CLUBES / PAÍSES
 # =========================================================================
 with tab_clubes:
-    st.header("🏟️ Clubes e Países")
-    sub_import, sub_manual, sub_list = st.tabs(["📁 Importar CSV", "➕ Adicionar Manual", "📋 Ver Todos"])
+    st.header("Gerenciamento de Clubes e Países")
+    st.caption("Aqui você pode visualizar os times cadastrados ou importar novos arquivos.")
 
-    with sub_import:
-        up_file = st.file_uploader("Arquivo CSV (ex: fc26_times_por_pais.csv)", type=["csv"])
-        if up_file is not None:
+    sub_imp, sub_manual, sub_list = st.tabs(["📂 Importar CSV", "➕ Adicionar Manual", "📋 Ver Todos"])
+
+    with sub_imp:
+        st.write("Envie o arquivo CSV de clubes (ex: `fc26_times_por_pais.csv`):")
+        arquivo_enviado = st.file_uploader("Escolha o arquivo CSV", type=["csv"])
+        
+        if arquivo_enviado is not None:
             try:
-                df_imp = pd.read_csv(up_file, sep=';')
-                colunas_lower = {c.lower(): c for c in df_imp.columns}
-                col_liga = colunas_lower.get("pais") or colunas_lower.get("liga") or colunas_lower.get("league")
+                import io
+                # Lê o CSV enviado usando o separador correto (ponto e vírgula)
+                df_imp = pd.read_csv(arquivo_enviado, sep=";")
+                
+                # Normaliza os nomes das colunas para minúsculas para evitar erros
+                df_imp.columns = [c.strip().lower() for c in df_imp.columns]
+                
+                colunas_lower = {col: col for col in df_imp.columns}
+                col_liga = colunas_lower.get("pais") or colunas_lower.get("liga")
                 col_clube = colunas_lower.get("time") or colunas_lower.get("clube") or colunas_lower.get("club")
 
                 if col_liga and col_clube:
@@ -191,8 +201,9 @@ with tab_clubes:
                         db.add_club(str(row[col_clube]), str(row[col_liga]))
                         cnt += 1
                     st.success(f"🎉 {cnt} times/países importados com sucesso!")
+                    st.rerun()
                 else:
-                    st.error("❌ O arquivo CSV precisa conter as colunas 'Pais' e 'Time' (ou 'Liga' e 'Clube').")
+                    st.error("❌ O arquivo CSV precisa conter as colunas 'Pais' e 'Time' (ou equivalentes).")
             except Exception as e:
                 st.error(f"Erro ao processar arquivo: {e}")
 
@@ -208,9 +219,6 @@ with tab_clubes:
     with sub_list:
         clubs = db.list_clubs()
         if clubs:
-            st.dataframe(pd.DataFrame(clubs)[["name", "league"]].rename(columns={"name": "Time", "league": "País / Liga"}), use_container_width=True, hide_index=True)
-            if st.button("🗑️ Limpar todos os times"):
-                db.clear_clubs()
-                st.rerun()
+            st.dataframe(pd.DataFrame(clubs)[["name", "league"]].rename(columns={"name": "Clube", "league": "País/Liga"}))
         else:
-            st.info("Nenhum time cadastrado.")
+            st.info("Nenhum clube cadastrado no momento.")
