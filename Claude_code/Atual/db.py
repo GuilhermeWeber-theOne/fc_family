@@ -1,185 +1,75 @@
-import os
-import sqlite3
-import pandas as pd
+import streamlit as st
+from supabase import create_client, Client
 
-DB_NAME = "fc_family.db"
+# =========================================================================
+# CONEXÃO SEGURA COM O SUPABASE
+# =========================================================================
+# Buscamos as credenciais que você salvou no arquivo .streamlit/secrets.toml
+# O Streamlit lê isso de forma segura através do st.secrets.
+try:
+    url: str = st.secrets["supabase"]["SUPABASE_URL"]
+    key: str = st.secrets["supabase"]["SUPABASE_KEY"]
+    supabase: Client = create_client(url, key)
+except Exception as e:
+    st.error(f"Erro ao conectar com o Supabase. Verifique suas credenciais no secrets.toml: {e}")
 
-def get_connection():
-    """Retorna uma conexão com o banco de dados SQLite."""
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row  # Permite acessar colunas pelo nome
-    return conn
-
-def init_db():
-    """
-    Inicializa o banco de dados, cria as tabelas e faz a carga inicial automática (Seed)
-    dos times a partir do arquivo CSV embutido no projeto, sem exigir upload manual.
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    # Tabela de Jogadores
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS players (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE
-        )
-    """)
-
-    # Tabela de Clubes / Países
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS clubs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            league TEXT NOT NULL
-        )
-    """)
-
-    # Tabela de Partidas
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS matches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            player1 TEXT NOT NULL,
-            player2 TEXT NOT NULL,
-            score1 INTEGER NOT NULL,
-            score2 INTEGER NOT NULL,
-            team1 TEXT NOT NULL,
-            team2 TEXT NOT NULL
-        )
-    """)
-
-    # Tabela de Detalhes da Partida (Entradas normalizadas)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS match_entries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            match_id INTEGER NOT NULL,
-            player_name TEXT NOT NULL,
-            side TEXT NOT NULL, -- 'casa' ou 'fora'
-            team TEXT NOT NULL,
-            goals INTEGER NOT NULL,
-            FOREIGN KEY (match_id) REFERENCES matches (id) ON DELETE CASCADE
-        )
-    """)
-
-    conn.commit()
-
-    # Seed automático dos clubes se a tabela estiver vazia
-    cursor.execute("SELECT COUNT(*) FROM clubs")
-    count = cursor.fetchone()[0]
-    if count == 0:
-        csv_path = "fc26_times_por_pais.csv"
-        if os.path.exists(csv_path):
-            try:
-                # O delimitador do seu CSV é ponto e vírgula (;)
-                df_csv = pd.read_csv(csv_path, sep=";")
-                for _, row in df_csv.iterrows():
-                    # Suporta chaves em inglês ou português ('club' ou 'clube', 'league' ou 'pais')
-                    league_val = row.get("league") or row.get("Pais") or "Desconhecido"
-                    name_val = row.get("club") or row.get("clube") or row.get("Time") or "Desconhecido"
-                    cursor.execute(
-                        "INSERT INTO clubs (name, league) VALUES (?, ?)",
-                        (str(name_val).strip(), str(league_val).strip())
-                    )
-                conn.commit()
-            except Exception as e:
-                print(f"Erro ao carregar o CSV automático: {e}")
-
-    conn.close()
-
-def add_player(name):
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO players (name) VALUES (?)", (name,))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        pass
-    finally:
-        conn.close()
-
-def update_player(old_name, new_name):
-    """Atualiza o nome de um jogador existente no banco de dados."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("UPDATE players SET name = ? WHERE name = ?", (new_name, old_name))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        pass
-    finally:
-        conn.close()
-
-def delete_player(name):
-    """Exclui um jogador do banco de dados pelo nome."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM players WHERE name = ?", (name,))
-    conn.commit()
-    conn.close()
+# =========================================================================
+# 1. FUNÇÕES DE JOGADORES
+# =========================================================================
 
 def list_players():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM players ORDER BY name ASC")
-    rows = cursor.fetchall()
-    conn.close()
-    return [row["name"] for row in rows]
+    """
+    Retorna uma lista com os nomes de todos os jogadores cadastrados no Supabase.
+    Mantém a mesma compatibilidade que o app.py já espera.
+    """
+    try:
+        response = supabase.table("players").select("name").execute()
+        # O Supabase retorna um objeto contendo a propriedade .data com a lista de dicionários
+        if response.data:
+            return [player["name"] for player in response.data]
+        return []
+    except Exception as e:
+        st.error(f"Erro ao listar jogadores: {e}")
+        return []
 
-def add_club(name, league):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO clubs (name, league) VALUES (?, ?)", (name, league))
-    conn.commit()
-    conn.close()
+def add_player(name: str):
+    """
+    Adiciona um novo jogador na tabela 'players' do Supabase.
+    """
+    try:
+        # Inserindo o registro na tabela
+        supabase.table("players").insert({"name": name.strip()}).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao adicionar jogador: {e}")
+        return False
+
+# =========================================================================
+# 2. FUNÇÕES DE CLUBES / TIMES
+# =========================================================================
 
 def list_clubs():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, league FROM clubs ORDER BY league ASC, name ASC")
-    rows = cursor.fetchall()
-    conn.close()
-    return [{"name": row["name"], "league": row["league"]} for row in rows]
+    """
+    Retorna a lista de clubes salvos na tabela 'clubs' do Supabase.
+    """
+    try:
+        response = supabase.table("clubs").select("name, league").execute()
+        if response.data:
+            return response.data
+        return []
+    except Exception as e:
+        st.error(f"Erro ao listar clubes: {e}")
+        return []
 
-def add_match(date, player1, player2, score1, score2, team1, team2):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO matches (date, player1, player2, score1, score2, team1, team2)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (date, player1, player2, score1, score2, team1, team2))
-    match_id = cursor.lastrowid
-
-    # Inserções normalizadas para as estatísticas
-    cursor.execute("""
-        INSERT INTO match_entries (match_id, player_name, side, team, goals)
-        VALUES (?, ?, 'casa', ?, ?)
-    """, (match_id, player1, team1, score1))
-
-    cursor.execute("""
-        INSERT INTO match_entries (match_id, player_name, side, team, goals)
-        VALUES (?, ?, 'fora', ?, ?)
-    """, (match_id, player2, team2, score2))
-
-    conn.commit()
-    conn.close()
-
-def list_matches():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM matches ORDER BY id DESC")
-    match_rows = cursor.fetchall()
-
-    matches = []
-    for m in match_rows:
-        m_id = m["id"]
-        cursor.execute("SELECT player_name, side, team, goals FROM match_entries WHERE match_id = ?", (m_id,))
-        entries = [dict(row) for row in cursor.fetchall()]
-        
-        matches.append({
-            "id": m_id,
-            "date": m["date"],
-            "entries": entries
-        })
-    conn.close()
-    return matches
+def save_clubs_bulk(clubs_list):
+    """
+    Salva uma lista inteira de clubes de uma vez só no Supabase 
+    (Útil para carregar o arquivo CSV padrão de fábrica).
+    """
+    try:
+        # O Supabase permite inserir uma lista de dicionários de uma vez
+        supabase.table("clubs").upsert(clubs_list).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar clubes em lote: {e}")
+        return False
