@@ -7,13 +7,13 @@ DB_NAME = "fc_family.db"
 def get_connection():
     """Retorna uma conexão com o banco de dados SQLite."""
     conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row  # Permite acessar as colunas pelo nome (ex: row['name'])
+    conn.row_factory = sqlite3.Row  # Permite acessar colunas pelo nome
     return conn
 
 def init_db():
     """
-    Inicializa o banco de dados, cria as tabelas necessárias 
-    e aplica a carga inicial (Seed) dos times padrão se a tabela estiver vazia.
+    Inicializa o banco de dados, cria as tabelas e faz a carga inicial automática (Seed)
+    dos times a partir do arquivo CSV embutido no projeto, sem exigir upload manual.
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -35,7 +35,7 @@ def init_db():
         )
     """)
 
-    # Tabela de Partidas / Placares
+    # Tabela de Partidas
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS matches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,43 +49,43 @@ def init_db():
         )
     """)
 
+    # Tabela de Detalhes da Partida (Entradas normalizadas)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS match_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            match_id INTEGER NOT NULL,
+            player_name TEXT NOT NULL,
+            side TEXT NOT NULL, -- 'casa' ou 'fora'
+            team TEXT NOT NULL,
+            goals INTEGER NOT NULL,
+            FOREIGN KEY (match_id) REFERENCES matches (id) ON DELETE CASCADE
+        )
+    """)
+
     conn.commit()
 
-    # --- SEED AUTOMÁTICA DOS TIMES (Carga Inicial Padrão) ---
-    # Verifica se a tabela de clubes está vazia
+    # Seed automático dos clubes se a tabela estiver vazia
     cursor.execute("SELECT COUNT(*) FROM clubs")
-    total_clubes = cursor.fetchone()[0]
-
-    if total_clubes == 0:
-        # Caminho do arquivo CSV padrão na raiz do projeto
+    count = cursor.fetchone()[0]
+    if count == 0:
         csv_path = "fc26_times_por_pais.csv"
         if os.path.exists(csv_path):
             try:
-                # Lê o CSV usando o delimitador correto (ponto e vírgula)
-                df_times = pd.read_csv(csv_path, sep=";")
-                
-                # Identifica as colunas de forma flexível (Pais / Time)
-                colunas_lower = {col.lower().strip(): col for col in df_times.columns}
-                col_liga = colunas_lower.get("pais") or colunas_lower.get("liga")
-                col_clube = colunas_lower.get("time") or colunas_lower.get("clube") or colunas_lower.get("club")
-
-                if col_liga and col_clube:
-                    dados_para_inserir = []
-                    for _, row in df_times.iterrows():
-                        time_nome = str(row[col_clube]).strip()
-                        liga_nome = str(row[col_liga]).strip()
-                        dados_para_inserir.append((time_nome, liga_nome))
-                    
-                    # Insere todos os times de uma vez no banco com segurança
-                    cursor.executemany("INSERT INTO clubs (name, league) VALUES (?, ?)", dados_para_inserir)
-                    conn.commit()
-                    print("Carga inicial (Seed) dos times padrão realizada com sucesso!")
+                # O delimitador do seu CSV é ponto e vírgula (;)
+                df_csv = pd.read_csv(csv_path, sep=";")
+                for _, row in df_csv.iterrows():
+                    # Suporta chaves em inglês ou português ('club' ou 'clube', 'league' ou 'pais')
+                    league_val = row.get("league") or row.get("Pais") or "Desconhecido"
+                    name_val = row.get("club") or row.get("clube") or row.get("Time") or "Desconhecido"
+                    cursor.execute(
+                        "INSERT INTO clubs (name, league) VALUES (?, ?)",
+                        (str(name_val).strip(), str(league_val).strip())
+                    )
+                conn.commit()
             except Exception as e:
-                print(f"Erro ao carregar a seed automática de times: {e}")
+                print(f"Erro ao carregar o CSV automático: {e}")
 
     conn.close()
-
-# Funções auxiliares de manipulação de dados
 
 def add_player(name):
     conn = get_connection()
@@ -94,9 +94,29 @@ def add_player(name):
         cursor.execute("INSERT INTO players (name) VALUES (?)", (name,))
         conn.commit()
     except sqlite3.IntegrityError:
-        pass  # Jogador já existe
+        pass
     finally:
         conn.close()
+
+def update_player(old_name, new_name):
+    """Atualiza o nome de um jogador existente no banco de dados."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE players SET name = ? WHERE name = ?", (new_name, old_name))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        pass
+    finally:
+        conn.close()
+
+def delete_player(name):
+    """Exclui um jogador do banco de dados pelo nome."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM players WHERE name = ?", (name,))
+    conn.commit()
+    conn.close()
 
 def list_players():
     conn = get_connection()
@@ -128,13 +148,38 @@ def add_match(date, player1, player2, score1, score2, team1, team2):
         INSERT INTO matches (date, player1, player2, score1, score2, team1, team2)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (date, player1, player2, score1, score2, team1, team2))
+    match_id = cursor.lastrowid
+
+    # Inserções normalizadas para as estatísticas
+    cursor.execute("""
+        INSERT INTO match_entries (match_id, player_name, side, team, goals)
+        VALUES (?, ?, 'casa', ?, ?)
+    """, (match_id, player1, team1, score1))
+
+    cursor.execute("""
+        INSERT INTO match_entries (match_id, player_name, side, team, goals)
+        VALUES (?, ?, 'fora', ?, ?)
+    """, (match_id, player2, team2, score2))
+
     conn.commit()
     conn.close()
 
 def list_matches():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, date, player1, player2, score1, score2, team1, team2 FROM matches ORDER BY id DESC")
-    rows = cursor.fetchall()
+    cursor.execute("SELECT * FROM matches ORDER BY id DESC")
+    match_rows = cursor.fetchall()
+
+    matches = []
+    for m in match_rows:
+        m_id = m["id"]
+        cursor.execute("SELECT player_name, side, team, goals FROM match_entries WHERE match_id = ?", (m_id,))
+        entries = [dict(row) for row in cursor.fetchall()]
+        
+        matches.append({
+            "id": m_id,
+            "date": m["date"],
+            "entries": entries
+        })
     conn.close()
-    return [dict(row) for row in rows]
+    return matches

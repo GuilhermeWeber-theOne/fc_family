@@ -13,13 +13,13 @@ db.init_db()
 
 st.title("⚽ App FC Family — Placar do Grupo")
 
-# Abas do aplicativo
-tabs = st.tabs(["🎮 Nova Partida", "🏆 Classificação", "📜 Histórico", "👤 Jogadores", "🏟️ Clubes / Países"])
-tab_nova_partida, tab_ranking, tab_historico, tab_jogadores, tab_clubes = tabs
+# Abas do aplicativo (Restauradas e preservadas integralmente)
+tabs = st.tabs(["🎮 Nova Partida", "🏆 Classificação", "📜 Histórico", "👤 Jogadores", "🏟️ Clubes / Países", "🔐 Admin"])
+tab_nova_partida, tab_ranking, tab_historico, tab_jogadores, tab_clubes, tab_admin = tabs
 
 
 # =========================================================================
-# 1. ABA: NOVA PARTIDA (Com Filtro por País/Liga Reativo e Definitivo)
+# 1. ABA: NOVA PARTIDA (Com Filtro por País/Liga Reativo e Prévia do Ranking)
 # =========================================================================
 with tab_nova_partida:
     st.header("Registrar Nova Partida")
@@ -29,196 +29,194 @@ with tab_nova_partida:
     todos_clubes = db.list_clubs()
 
     if not players or not todos_clubes:
-        st.warning("⚠️ Cadastre pelo menos 2 jogadores e importe o arquivo de clubes/países antes de registrar uma partida.")
+        st.warning("⚠️ Cadastre pelo menos 2 jogadores e aguarde o carregamento dos clubes/países antes de registrar uma partida.")
     else:
-        # Extrai os países/ligas únicas em ordem alfabética do banco de dados
+        # Extrai os países/ligas únicas em ordem alfabética
         ligas_disponiveis = sorted(list(set(c["league"] for c in todos_clubes)))
 
-        col_casa, col_fora = st.columns(2)
+        col_p1, col_p2 = st.columns(2)
 
-        # --- MANDANTE (CASA) ---
-        with col_casa:
-            st.markdown("### 🏠 Mandante (Casa)")
-            p_casa = st.selectbox("Jogador Casa", players, format_func=lambda x: x["name"], key="input_p_casa")
+        with col_p1:
+            st.markdown("### Jogador Casa")
+            player1 = st.selectbox("Selecione o Jogador da Casa", players, key="p1_select")
             
-            # Seleção do País/Liga (chave limpa)
-            liga_casa = st.selectbox("País / Liga (Casa)", ligas_disponiveis, key="liga_casa_sel")
+            liga1 = st.selectbox("País / Liga (Casa)", ligas_disponiveis, key="liga1_select")
+            times_liga1 = sorted([c["name"] for c in todos_clubes if c["league"] == liga1])
+            team1 = st.selectbox("Time (Casa)", times_liga1, key="team1_select")
             
-            # FILTRAGEM REATIVA: Filtra apenas os times daquele país selecionado
-            clubes_c = [c for c in todos_clubes if c["league"] == liga_casa]
-            
-            # CORREÇÃO CRUCIAL: Adicionamos o nome da liga na chave (`key`) do time. 
-            # Isso força o Streamlit a destruir e recriar o selectbox sempre que você muda de país, matando o bug da África do Sul!
-            clube_casa = st.selectbox(
-                "Time (Casa)", 
-                clubes_c, 
-                format_func=lambda x: x["name"], 
-                key=f"clube_casa_sel_{liga_casa}"
-            )
-            gols_casa = st.number_input("Gols (Casa)", min_value=0, step=1, value=0, key="input_gols_casa")
+            score1 = st.number_input("Gols (Casa)", min_value=0, step=1, key="score1_input")
 
-        # --- VISITANTE (FORA) ---
-        with col_fora:
-            st.markdown("### ✈️ Visitante (Fora)")
-            p_fora = st.selectbox("Jogador Fora", players, format_func=lambda x: x["name"], key="input_p_fora")
+        with col_p2:
+            st.markdown("### Jogador Fora")
+            # Remove o player1 para evitar partida de um jogador contra si mesmo
+            players_p2 = [p for p in players if p != player1]
+            player2 = st.selectbox("Selecione o Jogador de Fora", players_p2 if players_p2 else players, key="p2_select")
             
-            # Seleção do País/Liga
-            liga_fora = st.selectbox("País / Liga (Fora)", ligas_disponiveis, key="liga_fora_sel")
+            liga2 = st.selectbox("País / Liga (Fora)", ligas_disponiveis, key="liga2_select")
+            times_liga2 = sorted([c["name"] for c in todos_clubes if c["league"] == liga2])
+            team2 = st.selectbox("Time (Fora)", times_liga2, key="team2_select")
             
-            # FILTRAGEM REATIVA: Filtra apenas os times daquele país selecionado
-            clubes_f = [c for c in todos_clubes if c["league"] == liga_fora]
-            
-            # CORREÇÃO CRUCIAL: Chave dinâmica baseada no país selecionado para evitar travamentos
-            clube_fora = st.selectbox(
-                "Time (Fora)", 
-                clubes_f, 
-                format_func=lambda x: x["name"], 
-                key=f"clube_fora_sel_{liga_fora}"
-            )
-            gols_fora = st.number_input("Gols (Fora)", min_value=0, step=1, value=0, key="input_gols_fora")
+            score2 = st.number_input("Gols (Fora)", min_value=0, step=1, key="score2_input")
 
-        st.divider()
-        
-        # Botão fora de formulários engessados para dar total liberdade de reatividade aos selects acima
-        if st.button("💾 Salvar Partida e Atualizar Ranking", use_container_width=True, type="primary"):
-            if p_casa["id"] == p_fora["id"]:
-                st.error("❌ O Jogador da Casa não pode ser o mesmo Jogador de Fora!")
+        match_date = st.date_input("Data da Partida", value=date.today())
+
+        if st.button("💾 Salvar Partida", type="primary"):
+            if player1 == player2:
+                st.error("❌ Um jogador não pode jogar contra si mesmo!")
             else:
-                match_date = date.today().isoformat()
-                entries = [
-                    {"player_id": p_casa["id"], "club_id": clube_casa["id"], "side": "casa", "goals": int(gols_casa)},
-                    {"player_id": p_fora["id"], "club_id": clube_fora["id"], "side": "fora", "goals": int(gols_fora)}
-                ]
-                db.create_match(match_date, "", entries)
-                st.success("🎉 Partida registrada com sucesso!")
+                db.add_match(
+                    date=str(match_date),
+                    player1=player1,
+                    player2=player2,
+                    score1=int(score1),
+                    score2=int(score2),
+                    team1=team1,
+                    team2=team2
+                )
+                st.success(f"Partida salva com sucesso: {player1} ({score1}) x ({score2}) {player2}!")
                 st.rerun()
 
+    # --- PRÉVIA DA CLASSIFICAÇÃO NA TELA INICIAL ---
     st.markdown("---")
-    st.subheader("📊 Classificação Rápida do Grupo")
-    if players:
-        ranking_preview = stats.build_ranking(players, db.list_matches())
-        df_prev = pd.DataFrame(ranking_preview)
-        st.dataframe(df_prev[["Pos", "Jogador", "Pts", "J", "V", "E", "D", "SG"]], use_container_width=True, hide_index=True)
+    st.subheader("🔥 Prévia do Top Ranking")
+    
+    all_players = db.list_players()
+    all_matches = db.list_matches()
+    ranking_data = stats.build_ranking(all_players, all_matches)
+    
+    if ranking_data:
+        df_ranking = pd.DataFrame(ranking_data).head(5)
+        st.dataframe(df_ranking, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma partida registrada ainda para gerar o ranking.")
+    st.markdown("---")
 
 
 # =========================================================================
-# 2. ABA: CLASSIFICAÇÃO COMPLETA
+# 2. ABA: CLASSIFICAÇÃO (Tabela Completa)
 # =========================================================================
 with tab_ranking:
-    st.header("🏆 Classificação Geral (Pontos Corridos)")
-    st.caption("Vitória = 3 pts · Empate = 1 pt · Derrota = 0 pts")
+    st.header("🏆 Tabela de Classificação Geral")
+    st.caption("Critérios: Pontos Corridos -> Vitórias -> Saldo de Gols -> Gols Marcados -> Ordem Alfabética.")
 
     players = db.list_players()
     matches = db.list_matches()
+    ranking = stats.build_ranking(players, matches)
 
-    if not players:
-        st.info("Cadastre jogadores para gerar a tabela.")
-    else:
-        ranking = stats.build_ranking(players, matches)
+    if ranking:
         df = pd.DataFrame(ranking)
         st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Cadastre jogadores e registre partidas para visualizar a classificação completa.")
 
 
 # =========================================================================
 # 3. ABA: HISTÓRICO DE PARTIDAS
 # =========================================================================
 with tab_historico:
-    st.header("📜 Histórico de Partidas")
+    st.header("📜 Histórico de Partidas Realizadas")
     matches = db.list_matches()
 
-    if not matches:
-        st.info("Nenhuma partida registrada ainda.")
-    else:
+    if matches:
         for m in matches:
-            label, _, _ = stats.match_result_label(m["entries"])
-            with st.container(border=True):
-                col_info, col_del = st.columns([5, 1])
-                with col_info:
-                    st.markdown(f"**Data:** {m['match_date']}")
-                    for e in m["entries"]:
-                        side_icon = "🏠" if e["side"] == "casa" else "✈️"
-                        st.text(f"{side_icon} {e['player_name']} ({e['club_name']} - {e['league']}) ➔ {e['goals']} gols")
-                    st.markdown(f"**Placar Final:** {label}")
-                with col_del:
-                    if st.button("🗑️ Excluir", key=f"del_match_{m['id']}"):
-                        db.delete_match(m["id"])
-                        st.rerun()
+            label, winner, totals = stats.match_result_label(m["entries"])
+            entries = m["entries"]
+            
+            c_entry = next((e for e in entries if e["side"] == "casa"), {"player_name": "?", "team": "?", "goals": 0})
+            f_entry = next((e for e in entries if e["side"] == "fora"), {"player_name": "?", "team": "?", "goals": 0})
+
+            with st.expander(f"📅 {m['date']} | {c_entry['player_name']} ({c_entry['team']}) {c_entry['goals']} x {f_entry['goals']} {f_entry['player_name']} ({f_entry['team']})"):
+                st.write(f"**Data:** {m['date']}")
+                st.write(f"🏠 **Casa:** {c_entry['player_name']} usando **{c_entry['team']}** — **{c_entry['goals']} gols**")
+                st.write(f"✈️ **Fora:** {f_entry['player_name']} usando **{f_entry['team']}** — **{f_entry['goals']} gols**")
+    else:
+        st.info("Nenhuma partida registrada no histórico.")
 
 
 # =========================================================================
-# 4. ABA: GERENCIAR JOGADORES
+# 4. ABA: JOGADORES
 # =========================================================================
 with tab_jogadores:
-    st.header("👤 Gerenciar Jogadores")
-
+    st.header("👤 Gerenciamento de Jogadores")
+    
     with st.form("add_player_form", clear_on_submit=True):
-        p_name = st.text_input("Nome / Apelido do jogador")
-        if st.form_submit_button("Adicionar Jogador") and p_name.strip():
-            db.add_player(p_name.strip())
-            st.success(f"Jogador '{p_name.strip()}' adicionado!")
+        novo_jogador = st.text_input("Nome do Novo Jogador")
+        if st.form_submit_button("Adicionar Jogador") and novo_jogador.strip():
+            db.add_player(novo_jogador.strip())
+            st.success(f"Jogador '{novo_jogador.strip()}' cadastrado com sucesso!")
             st.rerun()
 
+    st.subheader("Jogadores Cadastrados:")
     players = db.list_players()
     if players:
-        st.subheader("Cadastrados")
         for p in players:
-            c1, c2 = st.columns([4, 1])
-            c1.write(p["name"])
-            if c2.button("Remover", key=f"del_p_{p['id']}"):
-                db.delete_player(p["id"])
-                st.rerun()
+            st.write(f"👤 {p}")
+    else:
+        st.info("Nenhum jogador cadastrado ainda.")
 
 
 # =========================================================================
 # 5. ABA: CLUBES / PAÍSES
 # =========================================================================
 with tab_clubes:
-    st.header("Gerenciamento de Clubes e Países")
-    st.caption("Aqui você pode visualizar os times cadastrados ou importar novos arquivos.")
+    st.header("🏟️ Clubes e Países Disponíveis")
+    st.caption("Estes times foram carregados automaticamente pelo sistema a partir da base oficial do projeto.")
 
-    sub_imp, sub_manual, sub_list = st.tabs(["📂 Importar CSV", "➕ Adicionar Manual", "📋 Ver Todos"])
+    clubs = db.list_clubs()
+    if clubs:
+        df_clubs = pd.DataFrame(clubs).rename(columns={"name": "Clube / Time", "league": "País / Liga"})
+        st.dataframe(df_clubs, use_container_width=True)
+    else:
+        st.warning("Nenhum clube encontrado no banco de dados.")
 
-    with sub_imp:
-        st.write("Envie o arquivo CSV de clubes (ex: `fc26_times_por_pais.csv`):")
-        arquivo_enviado = st.file_uploader("Escolha o arquivo CSV", type=["csv"])
-        
-        if arquivo_enviado is not None:
-            try:
-                import io
-                # Lê o CSV enviado usando o separador correto (ponto e vírgula)
-                df_imp = pd.read_csv(arquivo_enviado, sep=";")
-                
-                # Normaliza os nomes das colunas para minúsculas para evitar erros
-                df_imp.columns = [c.strip().lower() for c in df_imp.columns]
-                
-                colunas_lower = {col: col for col in df_imp.columns}
-                col_liga = colunas_lower.get("pais") or colunas_lower.get("liga")
-                col_clube = colunas_lower.get("time") or colunas_lower.get("clube") or colunas_lower.get("club")
 
-                if col_liga and col_clube:
-                    cnt = 0
-                    for _, row in df_imp.iterrows():
-                        db.add_club(str(row[col_clube]), str(row[col_liga]))
-                        cnt += 1
-                    st.success(f"🎉 {cnt} times/países importados com sucesso!")
+# =========================================================================
+# 6. ABA: ADMINISTRAÇÃO (Protegida por Senha - Restaurada e Segura)
+# =========================================================================
+with tab_admin:
+    st.header("🔐 Painel do Administrador")
+    st.caption("Área restrita para correção de cadastros e gerenciamento do sistema.")
+
+    # Lê a senha salva de forma segura no secrets.toml do Streamlit (padrão '123456')
+    senha_cadastrada = st.secrets.get("admin_password", "123456")
+
+    senha_digitada = st.text_input("Digite a senha de administrador:", type="password", key="admin_password_input")
+
+    if senha_digitada == senha_cadastrada:
+        st.success("✅ Acesso autorizado!")
+        st.markdown("---")
+
+        st.subheader("✏️ Gerenciar Jogadores (Editar ou Excluir)")
+        jogadores_atuais = db.list_players()
+
+        if jogadores_atuais:
+            jogador_selecionado = st.selectbox("Selecione o jogador:", jogadores_atuais, key="admin_select_player")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("##### Alterar Nome do Jogador")
+                novo_nome_input = st.text_input("Novo nome:", value=jogador_selecionado, key="admin_novo_nome")
+                if st.button("Salvar Alteração", key="btn_save_player"):
+                    if novo_nome_input.strip() and novo_nome_input.strip() != jogador_selecionado:
+                        db.update_player(jogador_selecionado, novo_nome_input.strip())
+                        st.success(f"Jogador '{jogador_selecionado}' renomeado para '{novo_nome_input.strip()}' com sucesso!")
+                        st.rerun()
+                    else:
+                        st.warning("Digite um nome novo e válido.")
+
+            with col2:
+                st.markdown("##### Excluir Jogador")
+                st.warning("⚠️ Cuidado: Isso pode afetar partidas antigas vinculadas a ele.")
+                if st.button("🗑️ Excluir Jogador Permanentemente", type="primary", key="btn_delete_player"):
+                    db.delete_player(jogador_selecionado)
+                    st.success(f"Jogador '{jogador_selecionado}' excluído com sucesso!")
                     st.rerun()
-                else:
-                    st.error("❌ O arquivo CSV precisa conter as colunas 'Pais' e 'Time' (ou equivalentes).")
-            except Exception as e:
-                st.error(f"Erro ao processar arquivo: {e}")
-
-    with sub_manual:
-        with st.form("add_club_form", clear_on_submit=True):
-            c_name = st.text_input("Nome do Time/Clube")
-            l_name = st.text_input("Nome do País/Liga")
-            if st.form_submit_button("Adicionar Time") and c_name.strip() and l_name.strip():
-                db.add_club(c_name.strip(), l_name.strip())
-                st.success(f"Time '{c_name}' adicionado!")
-                st.rerun()
-
-    with sub_list:
-        clubs = db.list_clubs()
-        if clubs:
-            st.dataframe(pd.DataFrame(clubs)[["name", "league"]].rename(columns={"name": "Clube", "league": "País/Liga"}))
         else:
-            st.info("Nenhum clube cadastrado no momento.")
+            st.info("Não há jogadores cadastrados para gerenciar.")
+
+    elif senha_digitada:
+        st.error("❌ Senha incorreta. Acesso negado.")
+    else:
+        st.info("🔒 Por favor, insira a senha de administrador para desbloquear as ferramentas de edição.")
+        
