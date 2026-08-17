@@ -137,28 +137,22 @@ with tab_historico:
 # 4. ABA: JOGADORES
 # =========================================================================
 with tab_jogadores:
-    st.subheader("👥 Gerenciamento de Jogadores")
-
-with st.form("form_jogador"):
-    novo_jogador = st.text_input("Nome do Novo Jogador")
-    cadastrar = st.form_submit_button("Cadastrar Jogador")
+    st.header("👤 Gerenciamento de Jogadores")
     
-    if cadastrar:
-        if novo_jogador.strip():
-            sucesso = db.add_player(novo_jogador.strip())
-            if sucesso:
-                st.success(f"Jogador '{novo_jogador.strip()}' cadastrado com sucesso na nuvem!")
-                st.rerun()
-        else:
-            st.warning("Digite um nome válido para o jogador.")
+    with st.form("add_player_form", clear_on_submit=True):
+        novo_jogador = st.text_input("Nome do Novo Jogador")
+        if st.form_submit_button("Adicionar Jogador") and novo_jogador.strip():
+            db.add_player(novo_jogador.strip())
+            st.success(f"Jogador '{novo_jogador.strip()}' cadastrado com sucesso!")
+            st.rerun()
 
-st.subheader("Jogadores Cadastrados:")
-players = db.list_players()
-if players:
-    for p in players:
-        st.write(f"👤 {p}")
-else:
-    st.info("Nenhum jogador cadastrado ainda.")
+    st.subheader("Jogadores Cadastrados:")
+    players = db.list_players()
+    if players:
+        for p in players:
+            st.write(f"👤 {p}")
+    else:
+        st.info("Nenhum jogador cadastrado ainda.")
 
 
 # =========================================================================
@@ -225,4 +219,4 @@ with tab_admin:
         st.error("❌ Senha incorreta. Acesso negado.")
     else:
         st.info("🔒 Por favor, insira a senha de administrador para desbloquear as ferramentas de edição.")
-        
+        l
