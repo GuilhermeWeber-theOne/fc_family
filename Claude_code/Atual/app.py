@@ -9,7 +9,7 @@ import stats
 
 # Configuração da página
 st.set_page_config(page_title="App FC Family", page_icon="⚽", layout="wide")
-db.init_db()
+#db.init_db()
 
 st.title("⚽ App FC Family — Placar do Grupo")
 
@@ -219,4 +219,4 @@ with tab_admin:
         st.error("❌ Senha incorreta. Acesso negado.")
     else:
         st.info("🔒 Por favor, insira a senha de administrador para desbloquear as ferramentas de edição.")
-        
+        l
