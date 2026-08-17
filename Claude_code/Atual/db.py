@@ -4,35 +4,30 @@ from supabase import create_client, Client
 # =========================================================================
 # CONEXÃO SEGURA COM O SUPABASE
 # =========================================================================
-# Buscamos as credenciais de segurança guardadas no arquivo secrets.toml
 try:
     url: str = st.secrets["supabase"]["SUPABASE_URL"]
     key: str = st.secrets["supabase"]["SUPABASE_KEY"]
     supabase: Client = create_client(url, key)
 except Exception as e:
-    st.error(f"Erro ao conectar com o Supabase. Verifique suas credenciais no secrets.toml: {e}")
+    st.error(f"Erro ao conectar com o Supabase. Verifique o secrets.toml: {e}")
 
 # =========================================================================
 # 1. FUNÇÕES DE JOGADORES (PLAYERS)
 # =========================================================================
 
 def list_players():
-    """
-    Retorna uma lista com os nomes de todos os jogadores cadastrados na nuvem.
-    """
+    """Retorna a lista de nomes de jogadores cadastrados na nuvem."""
     try:
         response = supabase.table("players").select("name").execute()
         if response.data:
             return [player["name"] for player in response.data]
         return []
     except Exception as e:
-        st.error(f"Erro ao listar jogadores: {e}")
+        # Silencia ou exibe de forma amigável se a tabela estiver vazia
         return []
 
 def add_player(name: str):
-    """
-    Adiciona um novo jogador na tabela 'players' do Supabase.
-    """
+    """Adiciona um novo jogador na tabela 'players' do Supabase."""
     try:
         supabase.table("players").insert({"name": name.strip()}).execute()
         return True
@@ -45,22 +40,17 @@ def add_player(name: str):
 # =========================================================================
 
 def list_clubs():
-    """
-    Retorna a lista de clubes cadastrados na tabela 'clubs' do Supabase.
-    """
+    """Retorna a lista de clubes cadastrados na tabela 'clubs' do Supabase."""
     try:
         response = supabase.table("clubs").select("name, league").execute()
         if response.data:
             return response.data
         return []
     except Exception as e:
-        st.error(f"Erro ao listar clubes: {e}")
         return []
 
 def save_clubs_bulk(clubs_list):
-    """
-    Salva uma lista inteira de clubes em lote no Supabase.
-    """
+    """Salva uma lista inteira de clubes em lote no Supabase."""
     try:
         supabase.table("clubs").upsert(clubs_list).execute()
         return True
@@ -69,27 +59,21 @@ def save_clubs_bulk(clubs_list):
         return False
 
 # =========================================================================
-# 3. FUNÇÕES DE PARTIDAS E PLACARES (MATCHES) - PRESERVADAS E INTEGRadas
+# 3. FUNÇÕES DE PARTIDAS E PLACARES (MATCHES) - PRESERVADAS INTEGRALMENTE
 # =========================================================================
 
 def list_matches():
-    """
-    Retorna todas as partidas cadastradas na tabela 'matches' do Supabase.
-    Crucial para alimentar a classificação em tempo real e o histórico.
-    """
+    """Retorna todas as partidas cadastradas na tabela 'matches' do Supabase."""
     try:
         response = supabase.table("matches").select("*").execute()
         if response.data:
             return response.data
         return []
     except Exception as e:
-        st.error(f"Erro ao listar partidas: {e}")
         return []
 
 def add_match(player1, player2, club1, club2, score1, score2, winner):
-    """
-    Salva uma nova partida com os placares, jogadores, clubes e vencedor na nuvem.
-    """
+    """Salva uma nova partida com placares, jogadores, clubes e vencedor na nuvem."""
     try:
         match_data = {
             "player1": player1,
