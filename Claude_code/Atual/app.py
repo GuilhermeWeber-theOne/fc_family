@@ -219,4 +219,4 @@ with tab_admin:
         st.error("❌ Senha incorreta. Acesso negado.")
     else:
         st.info("🔒 Por favor, insira a senha de administrador para desbloquear as ferramentas de edição.")
-        l
+        
