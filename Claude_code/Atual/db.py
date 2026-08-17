@@ -4,8 +4,6 @@ from supabase import create_client, Client
 # =========================================================================
 # CONEXÃO SEGURA COM O SUPABASE
 # =========================================================================
-# Buscamos as credenciais que você salvou no arquivo .streamlit/secrets.toml
-# O Streamlit lê isso de forma segura através do st.secrets.
 try:
     url: str = st.secrets["supabase"]["SUPABASE_URL"]
     key: str = st.secrets["supabase"]["SUPABASE_KEY"]
@@ -18,13 +16,9 @@ except Exception as e:
 # =========================================================================
 
 def list_players():
-    """
-    Retorna uma lista com os nomes de todos os jogadores cadastrados no Supabase.
-    Mantém a mesma compatibilidade que o app.py já espera.
-    """
+    """Retorna a lista de nomes de jogadores cadastrados no Supabase."""
     try:
         response = supabase.table("players").select("name").execute()
-        # O Supabase retorna um objeto contendo a propriedade .data com a lista de dicionários
         if response.data:
             return [player["name"] for player in response.data]
         return []
@@ -33,11 +27,8 @@ def list_players():
         return []
 
 def add_player(name: str):
-    """
-    Adiciona um novo jogador na tabela 'players' do Supabase.
-    """
+    """Adiciona um novo jogador na tabela 'players'."""
     try:
-        # Inserindo o registro na tabela
         supabase.table("players").insert({"name": name.strip()}).execute()
         return True
     except Exception as e:
@@ -49,9 +40,7 @@ def add_player(name: str):
 # =========================================================================
 
 def list_clubs():
-    """
-    Retorna a lista de clubes salvos na tabela 'clubs' do Supabase.
-    """
+    """Retorna a lista de clubes salvos na tabela 'clubs'."""
     try:
         response = supabase.table("clubs").select("name, league").execute()
         if response.data:
@@ -62,14 +51,44 @@ def list_clubs():
         return []
 
 def save_clubs_bulk(clubs_list):
-    """
-    Salva uma lista inteira de clubes de uma vez só no Supabase 
-    (Útil para carregar o arquivo CSV padrão de fábrica).
-    """
+    """Salva uma lista inteira de clubes em lote no Supabase."""
     try:
-        # O Supabase permite inserir uma lista de dicionários de uma vez
         supabase.table("clubs").upsert(clubs_list).execute()
         return True
     except Exception as e:
         st.error(f"Erro ao salvar clubes em lote: {e}")
         return False
+
+# =========================================================================
+# 3. FUNÇÕES DE PARTIDAS E PLACARES (MATCHES) - ADICIONADAS AGORA
+# =========================================================================
+
+def list_matches():
+    """Retorna todas as partidas cadastradas na tabela 'matches' do Supabase."""
+    try:
+        response = supabase.table("matches").select("*").execute()
+        if response.data:
+            return response.data
+        return []
+    except Exception as e:
+        st.error(f"Erro ao listar partidas: {e}")
+        return []
+
+def add_match(player1, player2, club1, club2, score1, score2, winner):
+    """Salva uma nova partida com os placares e o vencedor na nuvem."""
+    try:
+        match_data = {
+            "player1": player1,
+            "player2": player2,
+            "club1": club1,
+            "club2": club2,
+            "score1": int(score1),
+            "score2": int(score2),
+            "winner": winner
+        }
+        supabase.table("matches").insert(match_data).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar partida: {e}")
+        return False
+    
