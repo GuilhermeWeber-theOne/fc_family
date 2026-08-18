@@ -2,15 +2,23 @@ import streamlit as st
 from supabase import create_client, Client
 
 # =========================================================================
-# CONEXÃO SEGURA COM O SUPABASE
+# CONEXÃO SEGURA COM O SUPABASE (COM DIAGNÓSTICO VISUAL)
 # =========================================================================
 try:
     url: str = st.secrets["supabase"]["SUPABASE_URL"]
     key: str = st.secrets["supabase"]["SUPABASE_KEY"]
-    supabase: Client = create_client(url, key)
-except Exception as e:
-    st.error(f"Erro ao conectar com o Supabase. Verifique o secrets.toml: {e}")
+    
+    # --- BLOCO DE RASTREAMENTO (Adicione estas 3 linhas) ---
+    print(f"👉 URL LIDA PELO PYTHON: [{url}]")
+    print(f"👉 TAMANHO DA URL: {len(url)} caracteres")
+    print(f"👉 A CHAVE COMEÇA COM: {key[:5]}... e tem {len(key)} caracteres")
+    # -------------------------------------------------------
 
+    supabase: Client = create_client(url, key)
+    st.success("✅ Conexão com o Supabase estabelecida com sucesso!")
+    
+except Exception as e:
+    st.error(f"❌ ERRO CRÍTICO DE CONEXÃO: Detalhe: {e}")
 # =========================================================================
 # 1. FUNÇÕES DE JOGADORES (PLAYERS)
 # =========================================================================
@@ -27,14 +35,15 @@ def list_players():
         return []
 
 def add_player(name: str):
-    """Adiciona um novo jogador na tabela 'players' do Supabase."""
+    """Adiciona um novo jogador na tabela 'players' do Supabase com rastreio de erro detalhado."""
     try:
-        supabase.table("players").insert({"name": name.strip()}).execute()
+        # Tenta executar a inserção e guarda a resposta do servidor
+        resposta = supabase.table("players").insert({"name": name.strip()}).execute()
         return True
     except Exception as e:
-        st.error(f"Erro ao adicionar jogador: {e}")
+        # Exibe o erro exato na tela para sabermos o que o Supabase recusou
+        st.error(f"⚠️ DETALHE DO ERRO NO SUPABASE: {str(e)}")
         return False
-
 # =========================================================================
 # 2. FUNÇÕES DE CLUBES / TIMES (CLUBS)
 # =========================================================================
